@@ -1,46 +1,34 @@
-name: Convert Yolov13 Detect Models
+name: Convert Custom ONNX Models  # 更新工作流名称
 
-# 触发工作流的事件
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
+    inputs:
+      onnx_model:
+        description: 'URL or repo path to your ONNX model'
+        required: true  # 添加输入参数
+  push: ...  # 保持原有触发条件
+  pull_request: ...  # 保持原有触发条件
 
 jobs:
-  pt2onnx:
-    strategy:
-      matrix:
-        runs-on: [ubuntu-22.04]
-    runs-on: ${{ matrix.runs-on }}
-    container:
-      image: kaylor/yolo:v13
-      options: --privileged
-
+  use_custom_onnx:  # 替换原来的 pt2onnx job
+    name: Load Custom ONNX
+    runs-on: ubuntu-22.04
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      with:
-        fetch-depth: 1000
-        fetch-tags: true
-
-    - name: Run build script
+    
+    - name: Fetch custom ONNX model
       run: |
-        # apt-get update && apt-get install -y libgl-dev
-        git clone https://github.com/iMoonLab/yolov13.git --depth 1 yolov13_source
-        echo current path = ${PWD}
-        export PYTHONPATH=${PWD}/yolov13_source
-        pip install onnxsim
-        cd yolo
-        mkdir -pv onnx
-        cd onnx
-        wget https://github.com/iMoonLab/yolov13/releases/download/yolov13/yolov13n.pt -O yolo.pt
-        python ../export_det_v13_origin.py -w yolo.pt
-        mv yolo.onnx yolov13_origin.onnx 
-        python ../export_det_v13.pyc -w yolo.pt --sim
+        mkdir -p yolo/onnx
+        # 从用户输入获取模型路径/URL
+        MODEL_SOURCE="${{ github.event.inputs.onnx_model }}"
+        
+        if [[ $MODEL_SOURCE == http* ]]; then
+          wget $MODEL_SOURCE -O yolo/onnx/yolo.onnx
+        else
+          cp $MODEL_SOURCE yolo/onnx/yolo.onnx
+        fi
+      shell: bash
 
     - name: Upload artifact
       uses: actions/upload-artifact@v4
@@ -49,7 +37,7 @@ jobs:
         path: yolo/onnx/*.onnx
 
   onnx2rknn:
-    needs: [pt2onnx]
+    needs: [use_custom_onnx]  # 依赖新任务
     strategy:
       matrix:
         runs-on: [ubuntu-22.04]
